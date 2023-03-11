@@ -1,4 +1,10 @@
 #include "systemcalls.h"
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +22,13 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    int status = system(cmd);
+    if (status == -1) {
+        return false;
+    }
+    int exit_status = WEXITSTATUS(status);
+    return exit_status == 0;
+//    return true;
 }
 
 /**
@@ -58,10 +69,30 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
-
+	pid_t pid;
+	bool result = true;
+	pid = fork();
+	if(pid == 0){
+		execv(command[0], command);
+		exit(1);
+	}
+	else if(pid == -1){
+		result = false;
+	}
+	else if(pid > 0){
+		int status;
+		pid_t chPid = waitpid(pid, &status, 0);
+		if(chPid < 0){
+			result = false;
+		}
+		else{
+			int res = WEXITSTATUS(status);
+			result = res == 0 ? true : false;
+		}
+	}
     va_end(args);
 
-    return true;
+    return result;
 }
 
 /**
@@ -92,8 +123,39 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
+	pid_t pid;
+	bool result = true;
+	pid = fork();
+	if(pid == 0){//chid process
+	 	int fd;
+	 	fd = creat(outputfile, S_IRUSR | S_IWUSR| S_IRGRP | S_IROTH);
+	 	if( fd < 0){
+	 		abort();
+ 		}
+ 		int ret = dup2(fd, STDOUT_FILENO);
+ 		if(ret < 0){
+ 			abort();
+ 		}
+		execv(command[0], command);
+		close(fd);
+		exit(1);
+	}
+	else if(pid == -1){
+		result = false;
+	}
+	else if(pid > 0){//parent process
+		int status;
+		pid_t chPid = waitpid(pid, &status, 0);
+		if(chPid < 0){
+			result = false;
+		}
+		else{
+			int res = WEXITSTATUS(status);
+			result = res == 0 ? true : false;
+		}
+	}
 
     va_end(args);
 
-    return true;
+    return result;
 }
